@@ -174,6 +174,16 @@
     display:block; width:100%; height:170px; border-radius:14px; border:1.5px solid var(--border);
     box-shadow:0 10px 26px -12px rgba(0,0,0,0.6); background:var(--bg);
   }
+  .explain-preview-chartcard{
+    border-radius:14px; border:1.5px solid var(--border); overflow:hidden;
+    box-shadow:0 10px 26px -12px rgba(0,0,0,0.6);
+  }
+  .explain-preview-chartcard .explain-preview-canvas{ border:none; border-radius:0; box-shadow:none; }
+  .explain-preview-chartcard .g2-actions{ border-top:1px solid var(--border); }
+  .explain-roundcount{
+    display:inline-block; margin-top:8px; font-size:15px; font-weight:800; color:var(--gold);
+    background:var(--gold-dim); padding:5px 12px; border-radius:100px;
+  }
   .rule-card{
     display:flex; align-items:center; gap:14px;
     background:var(--surface); border:1.5px solid var(--border); border-radius:16px; padding:14px 16px;
@@ -237,7 +247,7 @@
     background: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px) 0 0/100% 40px, var(--bg);
   }
 
-  /* ---------- game screen: 떡상을 잡아라! ---------- */
+  /* ---------- game screen: 사팔!사팔! ---------- */
   .g2-stats{
     display:flex; gap:1px; background:var(--border); border-bottom:1px solid var(--border); flex-shrink:0;
   }
@@ -459,6 +469,35 @@
   .asset{ width:130px; flex-shrink:0; text-align:right; font-family:'JetBrains Mono', monospace; font-weight:700; font-size:14.5px; }
   .empty-note{ padding:28px 18px; text-align:center; color:var(--text-dim); font-size:13px; }
   .footnote{ margin-top:12px; font-size:11px; color:var(--text-dim); text-align:center; }
+
+  /* ---------- 최종 당첨자 팝업 ---------- */
+  .winner-modal-overlay{
+    position:fixed; inset:0; z-index:50; background:rgba(5,7,13,0.72); backdrop-filter:blur(3px);
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .winner-modal{
+    width:100%; max-width:480px; max-height:80vh; overflow-y:auto;
+    background:var(--surface); border:1.5px solid var(--gold); border-radius:22px;
+    padding:28px 24px; box-shadow:0 24px 60px -20px rgba(0,0,0,0.7);
+  }
+  .winner-modal-title{
+    font-family:'Black Han Sans', sans-serif; font-size:24px; color:var(--gold);
+    text-align:center; margin-bottom:18px;
+  }
+  .winner-modal-list{ display:flex; flex-direction:column; gap:10px; }
+  .winner-row{
+    display:flex; align-items:center; gap:12px; background:var(--surface-2);
+    border:1px solid var(--border); border-radius:14px; padding:12px 16px;
+  }
+  .winner-row.gold{ border-color:var(--gold); background:linear-gradient(90deg, rgba(240,185,11,0.14), var(--surface-2)); }
+  .winner-row .w-rank{
+    font-family:'JetBrains Mono', monospace; font-weight:800; font-size:15px; color:var(--gold);
+    width:52px; flex-shrink:0; text-align:center;
+  }
+  .winner-row .w-name{ flex:1; min-width:0; font-weight:800; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .winner-row .w-score{ font-family:'JetBrains Mono', monospace; font-weight:700; font-size:14px; color:var(--text); flex-shrink:0; }
+  .winner-row.empty{ color:var(--text-dim); font-size:13px; justify-content:center; }
+  .winner-modal button.host-btn{ margin-top:20px; }
 </style>
 
 <!-- ================================================================= -->
@@ -508,7 +547,7 @@
       </div>
       <div class="game-card">
         <div class="game-icon" style="background:var(--up-dim);">🚀</div>
-        <div class="game-info"><div class="game-name">떡상을 잡아라!</div><div class="game-desc">매수/매도로 수익률 경쟁!</div></div>
+        <div class="game-info"><div class="game-name">사팔!사팔!</div><div class="game-desc">매수/매도로 수익률 경쟁!</div></div>
         <div class="game-tag tag-ready">대기</div>
       </div>
       <div class="game-card">
@@ -523,6 +562,7 @@
   <section class="screen" id="screen-explain" hidden>
     <div class="eyebrow"><span id="explainGameNameLabel">상한가헌터</span> · 게임 방법</div>
     <h1 class="title" style="font-size:26px;" id="explainTitle">색깔별 등락폭을 확인하세요</h1>
+    <div class="explain-roundcount" id="explainRoundCount">총 3회 진행</div>
     <p class="sub" id="explainSub">차트가 20초 동안 떨어집니다. 터치한 색에 따라<br>초기 투자금 <b style="color:var(--gold);">100만원</b>이 오르내려요.</p>
 
     <div class="rule-list" id="explainRulesGame1">
@@ -585,7 +625,13 @@
       </div>
       <div class="explain-preview">
         <div class="explain-preview-label">실제 게임 화면 예시 (실시간으로 움직여요)</div>
-        <canvas class="explain-preview-canvas" id="explainPreviewCanvasG2"></canvas>
+        <div class="explain-preview-chartcard">
+          <canvas class="explain-preview-canvas" id="explainPreviewCanvasG2"></canvas>
+          <div class="g2-actions" style="pointer-events:none;">
+            <button class="g2-btn g2-buy">매수<span class="g2-btn-sub">88주</span></button>
+            <button class="g2-btn g2-sell">매도<span class="g2-btn-sub">0주</span></button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -760,7 +806,7 @@
       </button>
       <button class="game-card" id="hostCardGame2">
         <div class="game-icon" style="background:var(--surface-2);">🚀</div>
-        <div class="game-info"><div class="game-name">떡상을 잡아라!</div><div class="game-desc">매수/매도로 수익률 경쟁!</div></div>
+        <div class="game-info"><div class="game-name">사팔!사팔!</div><div class="game-desc">매수/매도로 수익률 경쟁!</div></div>
         <div class="game-tag tag-ready">선택</div>
       </button>
       <button class="game-card" id="hostCardGame3">
@@ -775,7 +821,8 @@
   <section class="hscreen" id="host-explain" hidden>
     <div class="eyebrow">3단계 · <span id="hostExplainGameName">상한가헌터</span> 설명 중</div>
     <h1>참가자에게 규칙을 안내하고 있습니다</h1>
-    <div class="wait-badge" style="margin:0;"><span class="pulse-dot" style="margin-right:2px;"></span>확인 완료 <b class="mono" id="hostConfirmedCount">0</b> / <span class="mono" id="hostJoinCount2">0</span>명</div>
+    <div class="explain-roundcount" id="hostExplainRoundCount">총 3회 진행</div>
+    <div class="wait-badge" style="margin:12px 0 0;"><span class="pulse-dot" style="margin-right:2px;"></span>확인 완료 <b class="mono" id="hostConfirmedCount">0</b> / <span class="mono" id="hostJoinCount2">0</span>명</div>
 
     <div class="rule-list" id="hostRulesGame1" style="margin-top:16px;">
       <div class="rule-card">
@@ -813,7 +860,13 @@
       </div>
       <div class="explain-preview">
         <div class="explain-preview-label">실제 게임 화면 예시 (실시간으로 움직여요)</div>
-        <canvas class="explain-preview-canvas" id="hostPreviewCanvasG2"></canvas>
+        <div class="explain-preview-chartcard">
+          <canvas class="explain-preview-canvas" id="hostPreviewCanvasG2"></canvas>
+          <div class="g2-actions" style="pointer-events:none;">
+            <button class="g2-btn g2-buy">매수<span class="g2-btn-sub">88주</span></button>
+            <button class="g2-btn g2-sell">매도<span class="g2-btn-sub">0주</span></button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -896,10 +949,22 @@
       <div class="board-body" id="boardBody"></div>
     </div>
     <div class="hspacer" style="min-height:14px;"></div>
-    <button class="host-btn secondary wide" id="btnBackToList">← 게임 목록으로 돌아가기</button>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="host-btn secondary wide" id="btnBackToList" style="flex:1; min-width:160px;">← 게임 목록으로 돌아가기</button>
+      <button class="host-btn wide" id="btnShowWinners" style="flex:1; min-width:160px;">🏆 최종 당첨자 보기</button>
+    </div>
   </section>
 
   <div class="footnote">Firebase Realtime Database로 동기화됩니다 · 다른 기기(폰/컴퓨터)에서도 이 링크를 열면 실시간으로 연결됩니다</div>
+
+  <!-- 최종 당첨자 팝업 -->
+  <div class="winner-modal-overlay" id="winnerModalOverlay" hidden>
+    <div class="winner-modal">
+      <div class="winner-modal-title" id="winnerModalTitle">🏆 최종 당첨자</div>
+      <div class="winner-modal-list" id="winnerModalList"></div>
+      <button class="host-btn wide" id="btnCloseWinnerModal">닫기</button>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.14.1/firebase-app-compat.js"></script>
@@ -914,14 +979,22 @@
      Firebase data (kept live via .on("value") listeners); reads return from that cache instantly,
      writes update the cache optimistically AND push to Firebase so other devices see it too. */
   var HOST_ROUND_SECONDS = 22; // player game is 20s; give a small buffer before auto-revealing "ended"
-  var GAME_NAMES = { game1: "상한가헌터", game2: "떡상을 잡아라!", game3: "호재수집가" };
-  // 게임별로 몇 라운드를 진행할지 — 상한가헌터/떡상을 잡아라는 3회, 호재수집가는 2회.
+  var GAME_NAMES = { game1: "상한가헌터", game2: "사팔!사팔!", game3: "호재수집가" };
+  // 게임별로 몇 라운드를 진행할지 — 상한가헌터/사팔!사팔!는 3회, 호재수집가는 2회.
   var ROUND_COUNTS = { game1: 3, game2: 3, game3: 2 };
   // 게임별 "집계" 버튼을 누른 뒤 나오는 상품 안내 문구.
   var PRIZE_TEXT = {
     game1: "1등, 2등, 3등, 100등, 234등이<br>이번 배민 3만원 상품권의 주인공입니다!",
     game2: "1등, 2등, 99등, 101등, 123등이<br>이번 CJ 5만원 상품권의 주인공입니다!",
     game3: "1등, 2등, 200등, 마이너스 점수(없으면 300등)이<br>이번 와인 상품의 주인공입니다!"
+  };
+  // 게임별 당첨 등수 — PRIZE_TEXT와 정확히 같은 등수. game3의 4번째 자리는 "마이너스
+  // 점수(없으면 300등)"라서 고정 숫자가 아니라, 버튼을 누르는 시점에 실제 순위표를 보고
+  // 계산한다(computeSortedBoard의 꼴찌가 마이너스면 그 등수, 아니면 300등).
+  var WINNER_RANKS = {
+    game1: [1, 2, 3, 100, 234],
+    game2: [1, 2, 99, 101, 123],
+    game3: [1, 2, 200]
   };
 
   var firebaseConfig = {
@@ -1009,7 +1082,7 @@
 
   /* ===================== explain/rules screen previews =====================
      상한가헌터·호재수집가는 실제 플레이 화면을 미리 찍어둔 스크린샷(base64)을 그대로
-     보여주고, 떡상을 잡아라(game2)는 스크린샷 대신 실제 게임과 똑같은 방식(파도 함수
+     보여주고, 사팔!사팔!(game2)는 스크린샷 대신 실제 게임과 똑같은 방식(파도 함수
      합성)으로 그리는 작은 차트를 계속 움직이게 해서 보여준다. 이미지 데이터는 한 번만
      심어두고 참가자 화면 + 호스트 화면의 <img>에 JS로 똑같이 꽂아 넣어서(같은 base64를
      두 번 파일에 박아넣지 않도록) 파일 용량이 불필요하게 두 배로 불어나는 것을 막는다. */
@@ -1143,6 +1216,7 @@
 
     function applyExplainContent(gameId){
       document.getElementById("explainGameNameLabel").textContent = GAME_NAMES[gameId] || gameId;
+      document.getElementById("explainRoundCount").textContent = "총 " + (ROUND_COUNTS[gameId] || 3) + "회 진행";
       document.getElementById("explainRulesGame1").hidden = (gameId !== "game1");
       document.getElementById("explainRulesGame2").hidden = (gameId !== "game2");
       document.getElementById("explainRulesGame3").hidden = (gameId !== "game3");
@@ -1185,7 +1259,7 @@
         btn.textContent = "상한가헌터 선택 (시뮬레이션)";
         btn.onclick = function(){ writeSelectedGame("game1"); writePhase("explain"); onPhaseChange("explain"); };
         btn2.hidden = false;
-        btn2.textContent = "떡상을 잡아라! 선택 (시뮬레이션)";
+        btn2.textContent = "사팔!사팔! 선택 (시뮬레이션)";
         btn2.onclick = function(){ writeSelectedGame("game2"); writePhase("explain"); onPhaseChange("explain"); };
         btn3.hidden = false;
         btn3.textContent = "호재수집가 선택 (시뮬레이션)";
@@ -1488,7 +1562,7 @@
       chips = [];
     }
 
-    // 게임별로 따로 기록 — 상한가헌터 3회분과 떡상을 잡아라 3회분, 호재수집가 2회분이
+    // 게임별로 따로 기록 — 상한가헌터 3회분과 사팔!사팔! 3회분, 호재수집가 2회분이
     // 서로 덮어쓰지 않도록 gameId별 배열에 저장한다 (한 닉네임이 여러 게임을 순서대로
     // 플레이해도 이전 게임 결과가 그대로 남아있어야 최종 집계 때 게임별로 순위를 낼 수 있음).
     function recordRoundScore(round, finalValue, gameId){
@@ -1578,7 +1652,7 @@
       }
     });
 
-    /* ---------- game2: 떡상을 잡아라! ---------- */
+    /* ---------- game2: 사팔!사팔! ---------- */
     var G2_DURATION = 20;
     var g2Raf = null, g2CountdownTimer = null, g2AssetPushTimer = null;
     var g2 = null; // per-round state
@@ -2117,6 +2191,19 @@
     var PHASE_TO_SCREEN = { lobby:"host-lobby", select:"host-select", explain:"host-explain", playing:"host-playing", roundwait:"host-roundwait", tally:"host-tally", ended:"host-ended", results:"host-results" };
     var ROUND_LABEL = { 1: "첫 번째", 2: "두 번째", 3: "세 번째" };
 
+    // 특정 게임의 참가자 순위를 "닉네임 / 최고 기록 / 순위" 배열로 계산 — 호스트 순위표와
+    // 최종 당첨자 팝업이 똑같은 기준으로 순위를 매기도록 이 로직을 한 곳에 모아둔다.
+    function computeSortedBoard(players, gameIdForBoard, isG3){
+      var ids = Object.keys(players);
+      return ids.map(function(id){
+        var p = players[id];
+        var scores = (p.gameScores && p.gameScores[gameIdForBoard]) || [];
+        var valid = scores.filter(function(v){ return typeof v === "number"; });
+        var best = valid.length ? Math.max.apply(null, valid) : (isG3 ? 0 : 1000000);
+        return { id:id, name:p.name, asset:best, confirmed:!!p.confirmedRound };
+      }).sort(function(a,b){ return b.asset - a.asset; });
+    }
+
     function renderBoard(players){
       var boardBody = document.getElementById("boardBody");
       var ids = Object.keys(players);
@@ -2134,13 +2221,7 @@
         return;
       }
       var gameIdForBoard = readSelectedGame() || "game1";
-      var sorted = ids.map(function(id){
-        var p = players[id];
-        var scores = (p.gameScores && p.gameScores[gameIdForBoard]) || [];
-        var valid = scores.filter(function(v){ return typeof v === "number"; });
-        var best = valid.length ? Math.max.apply(null, valid) : (isG3 ? 0 : 1000000);
-        return { id:id, name:p.name, asset:best, confirmed:!!p.confirmedRound };
-      }).sort(function(a,b){ return b.asset - a.asset; });
+      var sorted = computeSortedBoard(players, gameIdForBoard, isG3);
 
       var oldRects = {};
       sorted.forEach(function(p){
@@ -2262,6 +2343,7 @@
       } else if (phase === "explain"){
         var gameId = readSelectedGame() || "game1";
         document.getElementById("hostExplainGameName").textContent = GAME_NAMES[gameId] || gameId;
+        document.getElementById("hostExplainRoundCount").textContent = "총 " + (ROUND_COUNTS[gameId] || 3) + "회 진행";
         document.getElementById("hostConfirmedCount").textContent = String(confirmedCountFor(1));
         document.getElementById("hostJoinCount2").textContent = String(joinCount);
         document.getElementById("hostRulesGame1").hidden = (gameId !== "game1");
@@ -2350,6 +2432,46 @@
       resetAllConfirmed();
       writePhase("select");
       render();
+    });
+    // "최종 당첨자 보기" — 방금 본 게임의 순위표를 다시 계산해서, 그 게임의 상품
+    // 당첨 등수(WINNER_RANKS)에 해당하는 사람들만 뽑아 정 중앙 팝업으로 보여준다.
+    document.getElementById("btnShowWinners").addEventListener("click", function(){
+      var players = readPlayers();
+      var gameId = readSelectedGame() || "game1";
+      var isG3 = (gameId === "game3");
+      var sorted = computeSortedBoard(players, gameId, isG3);
+      var ranks = (WINNER_RANKS[gameId] || [1]).slice();
+      if (isG3){
+        // 4번째 자리: 참가자 중 최하위 점수가 마이너스면 그 사람의 등수, 아니면 300등
+        var lastEntry = sorted[sorted.length - 1];
+        var lastIsNegative = !!(lastEntry && lastEntry.asset < 0);
+        ranks.push(lastIsNegative ? sorted.length : 300);
+      }
+      var fmtScore = isG3 ? function(v){ return Math.round(v).toLocaleString("ko-KR") + "점"; } : fmtKRW;
+      var rowsHtml = ranks.map(function(rank){
+        var entry = sorted[rank - 1];
+        if (!entry){
+          return '<div class="winner-row empty">' + rank + '등 — 참가자 없음</div>';
+        }
+        return '<div class="winner-row' + (rank === 1 ? ' gold' : '') + '">' +
+          '<div class="w-rank">' + rank + '등</div>' +
+          '<div class="w-name"></div>' +
+          '<div class="w-score">' + fmtScore(entry.asset) + '</div>' +
+          '</div>';
+      });
+      var listEl = document.getElementById("winnerModalList");
+      listEl.innerHTML = rowsHtml.length ? rowsHtml.join("") : '<div class="winner-row empty">참가자가 없습니다.</div>';
+      // 닉네임은 사용자 입력값이라 innerHTML이 아니라 textContent로 안전하게 채운다.
+      var nameEls = listEl.querySelectorAll(".w-name");
+      ranks.forEach(function(rank, idx){
+        var entry = sorted[rank - 1];
+        if (entry && nameEls[idx]) nameEls[idx].textContent = entry.name;
+      });
+      document.getElementById("winnerModalTitle").textContent = "🏆 " + (GAME_NAMES[gameId] || gameId) + " 최종 당첨자";
+      document.getElementById("winnerModalOverlay").hidden = false;
+    });
+    document.getElementById("btnCloseWinnerModal").addEventListener("click", function(){
+      document.getElementById("winnerModalOverlay").hidden = true;
     });
     // "참여자 전체 초기화" — 라운드 초기화(점수만 리셋)와 달리 /players 자체를 통째로 비워서
     // 접속했던 사람 기록을 전부 지운다. 호스트 화면(#host)에서만 보이는 버튼이므로 일반
