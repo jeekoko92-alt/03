@@ -1245,6 +1245,21 @@
         writePlayerField(PLAYER_ID, { name: name, confirmedRound: 0, asset: INITIAL_ASSET, gameScores: {}, online: true, ts: Date.now() });
         state.asset = INITIAL_ASSET;
       }
+      startHeartbeat();
+    }
+    // 입장한 뒤로는 (게임 진행 중이 아니어도) 계속 일정 주기로 "ts"를 갱신해서 이 접속이
+    // 아직 살아있다는 걸 알린다. onDisconnect가 online:false로 바꿔주는 데는 약간의 시차가
+    // 있을 수 있어서(서버가 끊김을 감지하기까지 시간이 걸림), "온라인 여부"만으로는 진짜
+    // 최근에 살아있었는지 확실히 알기 어렵다 — 그래서 중복 닉네임 체크에서 이 ts를 같이
+    // 봐서, online:true여도 ts가 너무 오래됐으면(하트비트가 끊긴 지 오래면) "사실상 끊긴
+    // 세션"으로 보고 재입장을 막지 않는다.
+    var HEARTBEAT_INTERVAL_MS = 15000;
+    var heartbeatTimer = null;
+    function startHeartbeat(){
+      if (heartbeatTimer) return; // 이미 돌고 있으면 중복으로 또 시작하지 않는다
+      heartbeatTimer = setInterval(function(){
+        if (PLAYER_ID) writePlayerField(PLAYER_ID, { ts: Date.now() });
+      }, HEARTBEAT_INTERVAL_MS);
     }
     // confirmedRound = the highest round number this player has confirmed
     // they're ready to play. Round-aware (rather than a single reused boolean)
@@ -1279,8 +1294,27 @@
       var v = nickInput.value.trim();
       if (!v){ nickErr.textContent = "닉네임을 입력해주세요."; return; }
       nickErr.textContent = "";
+
+      // 같은 닉네임(=같은 PLAYER_ID)을 쓰는 사람이 이미 있는지 확인. "현재 접속 중"으로
+      // 볼 때만 진짜 중복으로 막는다 — online:true이면서 동시에 ts(마지막 하트비트)가
+      // HEARTBEAT_INTERVAL_MS보다 크게 오래되지 않았을 때만 "진짜 접속 중"으로 판단한다.
+      // online만 보면 안 되는 이유: 실제로 연결이 끊겨도 Firebase의 onDisconnect가
+      // online:false로 바꿔주기까지 약간의 시차가 있어서, 그 사이에 같은 사람이 빠르게
+      // 재입장하면 "아직 안 끊긴 걸로" 오판해 정상적인 재입장을 막아버릴 수 있다. ts가
+      // 최근 하트비트 주기 안에 갱신되지 않았다면 online 값과 무관하게 "사실상 끊긴
+      // 세션"으로 보고 재입장을 허용한다.
+      var candidateId = nicknameToId(v);
+      var existingPlayer = readPlayers()[candidateId];
+      var lastSeenAgo = existingPlayer && existingPlayer.ts ? (Date.now() - existingPlayer.ts) : Infinity;
+      var reallyOnline = !!(existingPlayer && existingPlayer.online === true && lastSeenAgo < HEARTBEAT_INTERVAL_MS * 2);
+      if (reallyOnline){
+        alert("중복! 다른 닉네임을 입력해주세요.");
+        nickInput.focus();
+        return;
+      }
+
       state.nickname = v;
-      PLAYER_ID = nicknameToId(v);
+      PLAYER_ID = candidateId;
       armPresence(PLAYER_ID);
       try { localStorage.setItem("bullrush_nick", v); } catch(e){}
       joinAsPlayer(v);
@@ -1288,9 +1322,35 @@
       var phase = readPhase();
       document.getElementById("welcomeMsg").innerHTML = v + "님, 입장 완료!<br>주최자가 게임을 시작하면 바로 화면이 전환됩니다.";
       document.getElementById("liveCount").textContent = String(liveJoinCount());
-      if (phase === "lobby") show("screen-waiting");
-      else if (phase === "explain") show("screen-explain");
-      else show("screen-select");
+      if (phase === "lobby"){
+        show("screen-waiting");
+      } else if (phase === "explain"){
+        state.round = 1;
+        show("screen-explain");
+      } else if (phase === "playing" || phase === "roundwait"){
+        // 게임 도중(또는 라운드 사이)에 연결이 끊겼다가 같은 닉네임으로 재입장한 경우.
+        // 이미 시작된 라운드에는 끼어들 수 없으니(다른 참가자들과 타이밍이 안 맞음),
+        // 대신 "다음 라운드 대기" 화면으로 보내서 다음 라운드가 시작되면 자동으로
+        // 게임 화면으로 전환되게 한다(onPhaseChange의 "playing" 분기가 처리).
+        var gameId = readSelectedGame() || "game1";
+        var totalRounds = ROUND_COUNTS[gameId] || 3;
+        var curRound = readRound() || 1;
+        // roundwait 단계에서는 readRound()가 이미 "다음에 시작될 라운드" 번호이고,
+        // playing 단계에서는 readRound()가 "지금 한창 진행 중인 라운드" 번호이므로,
+        // 재입장한 사람이 실제로 참여하게 될 다음 라운드 번호를 각각 다르게 계산한다.
+        var nextPlayableRound = (phase === "roundwait") ? curRound : Math.min(curRound + 1, totalRounds);
+        state.round = nextPlayableRound;
+        // 다음 라운드가 실제로 남아있을 때만 "이 라운드에 참여 준비 완료"로 표시한다
+        // (마지막 라운드가 이미 진행 중이면 더 참여할 라운드가 없으므로 표시하지 않음).
+        if (phase === "roundwait" || curRound < totalRounds){
+          setConfirmedRound(nextPlayableRound);
+        }
+        show("screen-waitstart");
+      } else {
+        // select / tally / ended / results 등 — 이번 게임이 아직 시작 전이거나 이미
+        // 끝난 뒤에 재입장한 경우엔 다음 게임 선택을 기다리는 화면으로 보낸다.
+        show("screen-select");
+      }
     });
     nickInput.addEventListener("keydown", function(e){ if (e.key === "Enter") document.getElementById("btnJoin").click(); });
 
