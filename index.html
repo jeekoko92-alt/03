@@ -1012,22 +1012,41 @@
   var _fbReady = false;
   var _onRemoteUpdate = null; // set by initPlayer()/initHost() to react to any live change
 
+  // Firebase 쓰기가 실패해도(예: 보안 규칙 권한 문제, 네트워크 문제) 지금까지는 콘솔에도
+  // 안 찍히고 화면에도 아무 표시가 없어서, "왜 안 되는지" 알 방법이 전혀 없었다. 실제
+  // 행사에서 이 문제를 바로 알아챌 수 있도록, 쓰기가 실패하면 화면 맨 위에 빨간 띠로
+  // 에러 코드를 보여준다(예: PERMISSION_DENIED면 보안 규칙 문제라는 뜻).
+  function reportFbError(where, err){
+    try {
+      console.error("[불장 러시] Firebase 오류 (" + where + "):", err);
+      var banner = document.getElementById("fbErrorBanner");
+      if (!banner){
+        banner = document.createElement("div");
+        banner.id = "fbErrorBanner";
+        banner.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;background:#dc2626;color:#fff;font-weight:800;font-size:12.5px;line-height:1.4;text-align:center;padding:8px 12px;box-shadow:0 2px 10px rgba(0,0,0,0.4);";
+        document.body.appendChild(banner);
+      }
+      var code = (err && err.code) ? err.code : "unknown";
+      banner.textContent = "⚠ 서버 저장 실패 [" + where + " / " + code + "] — Firebase 보안 규칙 또는 연결을 확인해주세요";
+    } catch(e){}
+  }
+
   try {
     firebase.initializeApp(firebaseConfig);
     var db = firebase.database();
     _fbReady = true;
 
-    db.ref(ROOM + "/players").on("value", function(snap){ _cache.players = snap.val() || {}; if (_onRemoteUpdate) _onRemoteUpdate("players"); });
-    db.ref(ROOM + "/phase").on("value", function(snap){ _cache.phase = snap.val() || "lobby"; if (_onRemoteUpdate) _onRemoteUpdate("phase"); });
-    db.ref(ROOM + "/phaseTs").on("value", function(snap){ _cache.phaseTs = snap.val() || 0; if (_onRemoteUpdate) _onRemoteUpdate("phaseTs"); });
-    db.ref(ROOM + "/selectedGame").on("value", function(snap){ _cache.selectedGame = snap.val() || ""; if (_onRemoteUpdate) _onRemoteUpdate("selectedGame"); });
-    db.ref(ROOM + "/round").on("value", function(snap){ _cache.round = snap.val() || 1; if (_onRemoteUpdate) _onRemoteUpdate("round"); });
+    db.ref(ROOM + "/players").on("value", function(snap){ _cache.players = snap.val() || {}; if (_onRemoteUpdate) _onRemoteUpdate("players"); }, function(err){ reportFbError("players 읽기", err); });
+    db.ref(ROOM + "/phase").on("value", function(snap){ _cache.phase = snap.val() || "lobby"; if (_onRemoteUpdate) _onRemoteUpdate("phase"); }, function(err){ reportFbError("phase 읽기", err); });
+    db.ref(ROOM + "/phaseTs").on("value", function(snap){ _cache.phaseTs = snap.val() || 0; if (_onRemoteUpdate) _onRemoteUpdate("phaseTs"); }, function(err){ reportFbError("phaseTs 읽기", err); });
+    db.ref(ROOM + "/selectedGame").on("value", function(snap){ _cache.selectedGame = snap.val() || ""; if (_onRemoteUpdate) _onRemoteUpdate("selectedGame"); }, function(err){ reportFbError("selectedGame 읽기", err); });
+    db.ref(ROOM + "/round").on("value", function(snap){ _cache.round = snap.val() || 1; if (_onRemoteUpdate) _onRemoteUpdate("round"); }, function(err){ reportFbError("round 읽기", err); });
   } catch(e){
     console.error("Firebase 초기화 실패 — localStorage로는 동작하지 않습니다:", e);
   }
 
   function readPlayers(){ return _cache.players || {}; }
-  function writePlayers(obj){ _cache.players = obj; if (_fbReady) db.ref(ROOM + "/players").set(obj); }
+  function writePlayers(obj){ _cache.players = obj; if (_fbReady) db.ref(ROOM + "/players").set(obj).catch(function(err){ reportFbError("players 쓰기", err); }); }
   // Merge-write into just ONE player's own sub-node, instead of reading the
   // whole players object and writing it all back (the old writePlayers()
   // pattern every caller used to use). With many concurrent players — and
@@ -1042,16 +1061,16 @@
   function writePlayerField(id, patch){
     _cache.players = _cache.players || {};
     _cache.players[id] = Object.assign({}, _cache.players[id] || {}, patch);
-    if (_fbReady) db.ref(ROOM + "/players/" + id).update(patch);
+    if (_fbReady) db.ref(ROOM + "/players/" + id).update(patch).catch(function(err){ reportFbError("player 쓰기", err); });
   }
   function readPhase(){ return _cache.phase || "lobby"; }
-  function writePhase(p){ _cache.phase = p; if (_fbReady) db.ref(ROOM + "/phase").set(p); }
+  function writePhase(p){ _cache.phase = p; if (_fbReady) db.ref(ROOM + "/phase").set(p).catch(function(err){ reportFbError("phase 쓰기", err); }); }
   function readPhaseTs(){ return Number(_cache.phaseTs) || 0; }
-  function writePhaseTs(ts){ _cache.phaseTs = ts; if (_fbReady) db.ref(ROOM + "/phaseTs").set(ts); }
+  function writePhaseTs(ts){ _cache.phaseTs = ts; if (_fbReady) db.ref(ROOM + "/phaseTs").set(ts).catch(function(err){ reportFbError("phaseTs 쓰기", err); }); }
   function readSelectedGame(){ return _cache.selectedGame || ""; }
-  function writeSelectedGame(g){ _cache.selectedGame = g; if (_fbReady) db.ref(ROOM + "/selectedGame").set(g); }
+  function writeSelectedGame(g){ _cache.selectedGame = g; if (_fbReady) db.ref(ROOM + "/selectedGame").set(g).catch(function(err){ reportFbError("selectedGame 쓰기", err); }); }
   function readRound(){ var v = Number(_cache.round); return (v && v >= 1) ? v : 1; }
-  function writeRound(r){ _cache.round = r; if (_fbReady) db.ref(ROOM + "/round").set(r); }
+  function writeRound(r){ _cache.round = r; if (_fbReady) db.ref(ROOM + "/round").set(r).catch(function(err){ reportFbError("round 쓰기", err); }); }
 
   // PLAYER_ID는 더 이상 세션마다 새로 뽑는 난수가 아니라, 닉네임으로부터 그대로 계산한다.
   // (이전엔 탭을 닫았다 같은 닉네임으로 재접속해도 새 난수 ID가 나와서 매번 /players에
@@ -2325,36 +2344,19 @@
           // so a player who already clicked their round-action button in the
           // few seconds before this auto-transition stays correctly counted
           // for the upcoming round — no race, no lost readiness.
-          if (!_fbReady){
-            // Local-only fallback (offline/single-tab testing) — no other
-            // writer can possibly race this, so just apply it directly.
-            if (expectedRound < totalRoundsForGame){ writeRound(expectedRound + 1); writePhase("roundwait"); }
-            else { writePhase("tally"); }
-            advancingRound = false;
-          } else {
-            // Atomic compare-and-swap on /round via a Firebase transaction.
-            // If the host page is accidentally open in two tabs (or render()
-            // fires again before the previous phase write has propagated
-            // back down), every extra attempt reads the SAME "current" round,
-            // but Firebase only lets ONE of them actually commit a change —
-            // every other attempt is retried against the now-advanced value,
-            // sees current !== expectedRound, and aborts. This is what
-            // guarantees a round is only ever advanced once, however many
-            // host instances or overlapping render() calls try at once —
-            // without it, a duplicate tab could silently double-advance the
-            // round counter and make the game end one round early.
-            db.ref(ROOM + "/round").transaction(function(current){
-              var cur = current || 1;
-              if (cur !== expectedRound) return; // someone else already advanced this — abort
-              return (cur < totalRoundsForGame) ? (cur + 1) : cur;
-            }, function(error, committed, snapshot){
-              advancingRound = false;
-              if (error || !committed) return; // lost the race, or a transient error — do nothing
-              var newRound = snapshot ? snapshot.val() : expectedRound;
-              if (newRound > expectedRound){ writePhase("roundwait"); }
-              else { writePhase("tally"); }
-            });
-          }
+          //
+          // 예전에는 여기서 Firebase .transaction()으로 라운드를 올렸다(호스트 탭이 실수로
+          // 두 개 열려도 라운드가 한 번만 올라가게 하려는 의도). 그런데 .transaction()은
+          // 그 경로에 "읽기"와 "쓰기" 권한이 둘 다 있어야 동작하는 반면, 이 앱의 다른 모든
+          // 쓰기(writePhase/writeRound 단독 호출 등)는 쓰기 권한만 있으면 된다 — 실제
+          // 행사에서 "라운드가 1회 이후로 전혀 안 넘어가고 조용히 멈추는" 문제가 있었는데,
+          // 딱 이 트랜잭션만 걸리는 권한 차이로 설명이 된다. 실제 행사는 호스트 화면을
+          // 한 대에서만 켜두므로 여러 탭이 동시에 라운드를 올릴 위험은 사실상 없고, 아래
+          // advancingRound 플래그가 같은 탭 안에서의 중복 진행은 여전히 막아준다 — 그래서
+          // 트랜잭션 없이 일반 쓰기로 통일해 이 문제를 근본적으로 없앴다.
+          if (expectedRound < totalRoundsForGame){ writeRound(expectedRound + 1); writePhase("roundwait"); }
+          else { writePhase("tally"); }
+          advancingRound = false;
           // This render() pass still shows the current ("playing") screen;
           // the next pass (poll or remote update, within ~500ms) picks up
           // the phase change once the winning write lands.
